@@ -24,12 +24,7 @@ type API struct {
 	kba service.KBAService
 }
 
-type ListResponse struct {
-	Total int         `json:"total"`
-	Items interface{} `json:"items"`
-}
-
-type Response struct {
+type MessageResponse struct {
 	Message string `json:"message"`
 }
 
@@ -65,7 +60,7 @@ func NewAPI(config *conf.Configuration) *API {
 	g := e.Group("/api/v1")
 
 	// UserProfile profile
-	g.POST("/upload", api.UploadPDF, middleware.BodyLimit("10M"))
+	g.POST("/upload", api.UploadPDF, middleware.BodyLimit("15M"))
 
 	e.HTTPErrorHandler = api.handleError
 	api.echo = e

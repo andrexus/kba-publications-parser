@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 
 	"github.com/labstack/echo"
+	"github.com/andrexus/kba-publications-parser/service"
 )
 
 func (api *API) UploadPDF(ctx echo.Context) error {
@@ -24,10 +25,17 @@ func (api *API) UploadPDF(ctx echo.Context) error {
 		return err
 	}
 
-	vehicles, err := api.kba.ParseVehiclesPDF(data)
+	parseResult, err := api.kba.ParseVehiclesCategoryM(data)
 	if err != nil {
-		response := &Response{Message: err.Error()}
+		response := &MessageResponse{Message: err.Error()}
 		return ctx.JSON(http.StatusInternalServerError, response)
 	}
-	return ctx.JSON(http.StatusOK, &ListResponse{Total: len(vehicles), Items: vehicles})
+
+	var parsedResults []*service.ParseResult
+	parsedResults = append(parsedResults, parseResult)
+	resp := &service.ParseResponse{
+		Success: true,
+		Data: parsedResults,
+	}
+	return ctx.JSON(http.StatusOK, resp)
 }

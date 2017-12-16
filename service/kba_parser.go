@@ -42,7 +42,7 @@ var (
 	maxPermissibleMass          = columns[14]
 )
 
-func parseVehicles(rs io.ReadSeeker) ([]Vehicle, error) {
+func parseVehiclesCategoryM(rs io.ReadSeeker) ([]VehicleCategoryM, error) {
 	pdfReader, err := pdf.NewPdfReader(rs)
 	if err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func parseVehicles(rs io.ReadSeeker) ([]Vehicle, error) {
 	}
 
 	numPages, err := pdfReader.GetNumPages()
-	vehicles := make([]Vehicle, 0)
+	vehicles := make([]VehicleCategoryM, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -148,8 +148,8 @@ func parsePage(page *pdf.PdfPage) ([]*TableElement, error) {
 	return result, nil
 }
 
-func parseTableElements(tableElements []*TableElement) []Vehicle {
-	result := make([]Vehicle, 0)
+func parseTableElements(tableElements []*TableElement) []VehicleCategoryM {
+	result := make([]VehicleCategoryM, 0)
 	row := make([]*TableElement, 0)
 
 	if len(tableElements) < 2 {
@@ -169,8 +169,8 @@ func parseTableElements(tableElements []*TableElement) []Vehicle {
 	return result
 }
 
-func parseRow(row []*TableElement) *Vehicle {
-	vehicle := &Vehicle{}
+func parseRow(row []*TableElement) *VehicleCategoryM {
+	vehicle := &VehicleCategoryM{}
 	for _, tableElement := range row {
 		closestPosition := closest(tableElement.X, columns)
 		switch closestPosition {

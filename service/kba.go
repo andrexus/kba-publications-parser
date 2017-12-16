@@ -2,7 +2,18 @@ package service
 
 import "bytes"
 
-type Vehicle struct {
+type ParseResponse struct {
+	Success bool          `json:"success"`
+	Data    []*ParseResult `json:"data"`
+}
+
+type ParseResult struct {
+	Total      int         `json:"total"`
+	EntityType string      `json:"entityType"`
+	Items      interface{} `json:"items"`
+}
+
+type VehicleCategoryM struct {
 	ManufacturerCodeNumber      *string `json:"manufacturerCodeNumber"`
 	TypeCodeNumber              *string `json:"typeCodeNumber"`
 	ManufacturerPlaintext       *string `json:"manufacturerPlaintext"`
@@ -21,12 +32,21 @@ type Vehicle struct {
 }
 
 type KBAService interface {
-	ParseVehiclesPDF(data []byte) ([]Vehicle, error)
+	ParseVehiclesCategoryM(data []byte) (*ParseResult, error)
 }
 
 type KBAServiceImpl struct {
 }
 
-func (c *KBAServiceImpl) ParseVehiclesPDF(data []byte) ([]Vehicle, error) {
-	return parseVehicles(bytes.NewReader(data))
+func (c *KBAServiceImpl) ParseVehiclesCategoryM(data []byte) (*ParseResult, error) {
+	items, err := parseVehiclesCategoryM(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	result := &ParseResult{
+		Total:      len(items),
+		EntityType: "VehicleCategoryM",
+		Items:      items,
+	}
+	return result, nil
 }
