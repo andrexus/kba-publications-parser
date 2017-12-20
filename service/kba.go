@@ -3,7 +3,7 @@ package service
 import "bytes"
 
 type ParseResponse struct {
-	Success bool          `json:"success"`
+	Success bool           `json:"success"`
 	Data    []*ParseResult `json:"data"`
 }
 
@@ -11,6 +11,9 @@ type ParseResult struct {
 	Total      int         `json:"total"`
 	EntityType string      `json:"entityType"`
 	Items      interface{} `json:"items"`
+}
+
+type EnergySource struct {
 }
 
 type VehicleCategoryM struct {
@@ -32,10 +35,44 @@ type VehicleCategoryM struct {
 }
 
 type KBAService interface {
+	ParsePDF(data []byte) ([]*ParseResult, error)
+
+	// SV 1 - Verzeichnis zur Systematisierung von Kraftfahrzeugen und ihren Anhängern
+	ParseTaxonomyDirectory(data []byte) ([]*ParseResult, error)
+
+	// SV 4.2 - Verzeichnis der Hersteller und Typen der für die Personenbeförderung ausgelegten und gebauten
+	// Kraftfahrzeuge mit mindestens vier Rädern (Klasse M)
 	ParseVehiclesCategoryM(data []byte) (*ParseResult, error)
 }
 
 type KBAServiceImpl struct {
+}
+
+func (c *KBAServiceImpl) ParsePDF(data []byte) ([]*ParseResult, error) {
+	var results = make([]*ParseResult, 0)
+
+	taxonomyResults, err := c.ParseTaxonomyDirectory(data)
+	if err != nil {
+		return nil, err
+	}
+	results = append(results, taxonomyResults...)
+
+	return results, nil
+}
+
+func (c *KBAServiceImpl) ParseTaxonomyDirectory(data []byte) ([]*ParseResult, error) {
+	energySources, err := parseEnergySources(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	var results = make([]*ParseResult, 0)
+	result := &ParseResult{
+		Total:      len(energySources),
+		EntityType: "EnergySource",
+		Items:      energySources,
+	}
+	results = append(results, result)
+	return results, nil
 }
 
 func (c *KBAServiceImpl) ParseVehiclesCategoryM(data []byte) (*ParseResult, error) {

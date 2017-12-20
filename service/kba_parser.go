@@ -11,10 +11,11 @@ import (
 
 	"strconv"
 
+	"unicode/utf8"
+
 	pdfcontent "github.com/unidoc/unidoc/pdf/contentstream"
 	pdfcore "github.com/unidoc/unidoc/pdf/core"
 	pdf "github.com/unidoc/unidoc/pdf/model"
-	"unicode/utf8"
 )
 
 const (
@@ -42,26 +43,46 @@ var (
 	maxPermissibleMass          = columns[14]
 )
 
+func parseEnergySources(rs io.ReadSeeker) ([]EnergySource, error) {
+	pdfReader, err := pdf.NewPdfReader(rs)
+	if err != nil {
+		return nil, err
+	}
+
+	numPages, err := pdfReader.GetNumPages()
+	items := make([]EnergySource, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	numPages = 85
+	for i := 79; i < numPages; i++ {
+		pageNum := i + 1
+
+		page, err := pdfReader.GetPage(pageNum)
+		if err != nil {
+			return nil, err
+		}
+
+		tableElements, err := parsePage(page)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Println("Found table elements: ", len(tableElements))
+		//items = append(items, parseTableElements(tableElements)...)
+	}
+
+	return items, nil
+}
+
 func parseVehiclesCategoryM(rs io.ReadSeeker) ([]VehicleCategoryM, error) {
 	pdfReader, err := pdf.NewPdfReader(rs)
 	if err != nil {
 		return nil, err
 	}
 
-	isEncrypted, err := pdfReader.IsEncrypted()
-	if err != nil {
-		return nil, err
-	}
-
-	if isEncrypted {
-		_, err = pdfReader.Decrypt([]byte(""))
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	numPages, err := pdfReader.GetNumPages()
-	vehicles := make([]VehicleCategoryM, 0)
+	items := make([]VehicleCategoryM, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -78,10 +99,10 @@ func parseVehiclesCategoryM(rs io.ReadSeeker) ([]VehicleCategoryM, error) {
 		if err != nil {
 			return nil, err
 		}
-		vehicles = append(vehicles, parseTableElements(tableElements)...)
+		items = append(items, parseTableElements(tableElements)...)
 	}
 
-	return vehicles, nil
+	return items, nil
 }
 
 type TableElement struct {
@@ -152,7 +173,7 @@ func parseTableElements(tableElements []*TableElement) []VehicleCategoryM {
 	result := make([]VehicleCategoryM, 0)
 	row := make([]*TableElement, 0)
 
-	if len(tableElements) < 2 {
+	if len(tableElements) < 4 {
 		return nil
 	}
 

@@ -25,17 +25,16 @@ func (api *API) UploadPDF(ctx echo.Context) error {
 		return err
 	}
 
-	parseResult, err := api.kba.ParseVehiclesCategoryM(data)
+	parseResults, err := api.kba.ParsePDF(data)
+	//parseResults, err := api.kba.ParseTaxonomyDirectory(data)
 	if err != nil {
 		response := &MessageResponse{Message: err.Error()}
 		return ctx.JSON(http.StatusInternalServerError, response)
 	}
 
-	var parsedResults []*service.ParseResult
-	parsedResults = append(parsedResults, parseResult)
 	resp := &service.ParseResponse{
 		Success: true,
-		Data: parsedResults,
+		Data: parseResults,
 	}
 	return ctx.JSON(http.StatusOK, resp)
 }
