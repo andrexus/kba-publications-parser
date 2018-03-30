@@ -20,7 +20,7 @@ var serveCmd = cobra.Command{
 	},
 }
 
-func serve(config *conf.Configuration) {
+func serve(cmd *cobra.Command, config *conf.Configuration) {
 
 	apiServer := api.NewAPI(config)
 

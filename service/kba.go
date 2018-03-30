@@ -14,6 +14,8 @@ type ParseResult struct {
 }
 
 type EnergySource struct {
+	ShortName string `json:"shortName"`
+	Code      string `json:"code"`
 }
 
 type VehicleCategoryM struct {

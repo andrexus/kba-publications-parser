@@ -2,45 +2,49 @@ package service
 
 import (
 	"fmt"
-
-	"math"
-
-	"log"
-
 	"io"
-
+	"log"
+	"math"
 	"strconv"
-
+	"strings"
 	"unicode/utf8"
 
+	"github.com/Sirupsen/logrus"
 	pdfcontent "github.com/unidoc/unidoc/pdf/contentstream"
 	pdfcore "github.com/unidoc/unidoc/pdf/core"
 	pdf "github.com/unidoc/unidoc/pdf/model"
 )
 
 const (
-	minHeight     = 134
-	maxHeight     = 575
-	lineDeviation = 2
+	minHeightVehiclePage      = 134
+	maxHeightVehiclePage      = 575
+	minHeightEnergySourcePage = 66
+	maxHeightEnergySourcePage = 690
+	lineDeviation             = 2
+	prefixEnergySource        = "Kraftstoffart bzw. Energiequelle"
 )
 
 var (
-	columns                     = []int{35, 67, 95, 220, 337, 460, 544, 598, 620, 652, 676, 712, 736, 767, 790}
-	manufacturerCodeNumber      = columns[0]
-	typeCodeNumber              = columns[1]
-	manufacturerPlaintext       = columns[2]
-	manufacturerTradeName       = columns[3]
-	commercialName              = columns[4]
-	typeCodeNumberAllotmentDate = columns[5]
-	vehicleCategory             = columns[6]
-	bodyworkCode                = columns[7]
-	fuelCode                    = columns[8]
-	maxNetPower                 = columns[9]
-	engineCapacity              = columns[10]
-	maxAxles                    = columns[11]
-	maxPoweredAxles             = columns[12]
-	maxSeats                    = columns[13]
-	maxPermissibleMass          = columns[14]
+	columnsVehicle              = []int{35, 67, 95, 220, 337, 460, 544, 598, 620, 652, 676, 712, 736, 767, 790}
+	manufacturerCodeNumber      = columnsVehicle[0]
+	typeCodeNumber              = columnsVehicle[1]
+	manufacturerPlaintext       = columnsVehicle[2]
+	manufacturerTradeName       = columnsVehicle[3]
+	commercialName              = columnsVehicle[4]
+	typeCodeNumberAllotmentDate = columnsVehicle[5]
+	vehicleCategory             = columnsVehicle[6]
+	bodyworkCode                = columnsVehicle[7]
+	fuelCode                    = columnsVehicle[8]
+	maxNetPower                 = columnsVehicle[9]
+	engineCapacity              = columnsVehicle[10]
+	maxAxles                    = columnsVehicle[11]
+	maxPoweredAxles             = columnsVehicle[12]
+	maxSeats                    = columnsVehicle[13]
+	maxPermissibleMass          = columnsVehicle[14]
+
+	columnsEnergySource = []int{191, 337}
+	esShortName         = columnsEnergySource[0]
+	esCode              = columnsEnergySource[1]
 )
 
 func parseEnergySources(rs io.ReadSeeker) ([]EnergySource, error) {
@@ -55,8 +59,7 @@ func parseEnergySources(rs io.ReadSeeker) ([]EnergySource, error) {
 		return nil, err
 	}
 
-	numPages = 85
-	for i := 79; i < numPages; i++ {
+	for i := 0; i < numPages; i++ {
 		pageNum := i + 1
 
 		page, err := pdfReader.GetPage(pageNum)
@@ -64,15 +67,45 @@ func parseEnergySources(rs io.ReadSeeker) ([]EnergySource, error) {
 			return nil, err
 		}
 
-		tableElements, err := parsePage(page)
+		text, err := parseText(page)
+		if err != nil {
+			logrus.Error(err.Error())
+			continue
+		}
+
+		if !strings.HasPrefix(text, prefixEnergySource) {
+			continue
+		}
+		fmt.Println("Page: ", i+1)
+		tableElements, err := parseEnergySourcePage(page)
 		if err != nil {
 			return nil, err
 		}
-		fmt.Println("Found table elements: ", len(tableElements))
-		//items = append(items, parseTableElements(tableElements)...)
+		//fmt.Println("Found table elements: ", len(tableElements))
+		//for _, elem := range tableElements {
+		//	fmt.Printf("%d, %d : %s\n", elem.X, elem.Y, elem.Text)
+		//}
+		items = append(items, parseEnergySourceTableElements(tableElements)...)
+	}
+
+	for _, item := range items {
+		fmt.Printf("%s - %s\n", item.Code, item.ShortName)
 	}
 
 	return items, nil
+}
+
+func parseText(page *pdf.PdfPage) (string, error) {
+	pageContentStr, err := page.GetAllContentStreams()
+	if err != nil {
+		return "", err
+	}
+
+	cstreamParser := pdfcontent.NewContentStreamParser(pageContentStr)
+	if err != nil {
+		return "", err
+	}
+	return cstreamParser.ExtractText()
 }
 
 func parseVehiclesCategoryM(rs io.ReadSeeker) ([]VehicleCategoryM, error) {
@@ -95,11 +128,11 @@ func parseVehiclesCategoryM(rs io.ReadSeeker) ([]VehicleCategoryM, error) {
 			return nil, err
 		}
 
-		tableElements, err := parsePage(page)
+		tableElements, err := parseVehiclePage(page)
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, parseTableElements(tableElements)...)
+		items = append(items, parseVehicleTableElements(tableElements)...)
 	}
 
 	return items, nil
@@ -111,7 +144,91 @@ type TableElement struct {
 	Text string
 }
 
-func parsePage(page *pdf.PdfPage) ([]*TableElement, error) {
+func parseEnergySourcePage(page *pdf.PdfPage) ([]*TableElement, error) {
+	pageContentStr, err := page.GetAllContentStreams()
+	fmt.Println(pageContentStr)
+	if err != nil {
+		return nil, err
+	}
+
+	cstreamParser := pdfcontent.NewContentStreamParser(pageContentStr)
+	if err != nil {
+		return nil, err
+	}
+
+	operations, err := cstreamParser.Parse()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*TableElement, 0)
+
+	parsing := true
+	x := 0.0
+	y := 0.0
+
+	txt := ""
+	for _, op := range *operations {
+		if op.Operand == "BT" {
+			txt = ""
+		} else if op.Operand == "ET" {
+			if len(txt) > 0 {
+				fmt.Printf("%f, %f: %s\n", x, y, txt)
+			}
+		}
+		if op.Operand == "Tm" && len(op.Params) == 6 {
+			if v, ok := op.Params[4].(*pdfcore.PdfObjectFloat); ok {
+				x = float64(*v)
+			}
+			if v, ok := op.Params[5].(*pdfcore.PdfObjectFloat); ok {
+				y = float64(*v)
+			}
+		}
+		if y < minHeightEnergySourcePage || y > maxHeightEnergySourcePage {
+			parsing = false
+			continue
+		} else {
+			parsing = true
+		}
+
+		if parsing {
+			if op.Operand == "TJ" {
+				if len(op.Params) < 1 {
+					continue
+				}
+				paramList, ok := op.Params[0].(*pdfcore.PdfObjectArray)
+				if !ok {
+					return nil, fmt.Errorf("invalid parameter type, no array (%T)", op.Params[0])
+				}
+				txt := ""
+				for _, obj := range *paramList {
+					if strObj, ok := obj.(*pdfcore.PdfObjectString); ok {
+						txt += string(*strObj)
+					}
+				}
+				if len(txt) > 0 && txt != " " {
+					result = append(result, &TableElement{X: int(math.Ceil(x)), Y: int(math.Ceil(y)), Text: decodeString([]byte(txt))})
+				}
+			} else if op.Operand == "Tj" {
+				if len(op.Params) < 1 {
+					continue
+				}
+				param, ok := op.Params[0].(*pdfcore.PdfObjectString)
+				if !ok {
+					return nil, fmt.Errorf("invalid parameter type, no array (%T)", op.Params[0])
+				}
+				txt := string(*param)
+				if len(txt) > 0 && txt != " " {
+					result = append(result, &TableElement{X: int(math.Ceil(x)), Y: int(math.Ceil(y)), Text: decodeString([]byte(txt))})
+				}
+			}
+		}
+	}
+
+	return result, nil
+}
+
+func parseVehiclePage(page *pdf.PdfPage) ([]*TableElement, error) {
 	pageContentStr, err := page.GetAllContentStreams()
 	if err != nil {
 		return nil, err
@@ -140,7 +257,7 @@ func parsePage(page *pdf.PdfPage) ([]*TableElement, error) {
 			}
 			if v, ok := op.Params[1].(*pdfcore.PdfObjectFloat); ok {
 				y = float64(*v)
-				if y < minHeight || y > maxHeight {
+				if y < minHeightVehiclePage || y > maxHeightVehiclePage {
 					parsing = false
 					continue
 				} else {
@@ -169,7 +286,28 @@ func parsePage(page *pdf.PdfPage) ([]*TableElement, error) {
 	return result, nil
 }
 
-func parseTableElements(tableElements []*TableElement) []VehicleCategoryM {
+func parseEnergySourceTableElements(tableElements []*TableElement) []EnergySource {
+	result := make([]EnergySource, 0)
+	row := make([]*TableElement, 0)
+
+	if len(tableElements) < 2 {
+		return nil
+	}
+
+	for i := 0; i < len(tableElements); i++ {
+		element := tableElements[i]
+		row = append(row, element)
+		if (i == len(tableElements)-1) || (element.Y < tableElements[i+1].Y-lineDeviation || element.Y > tableElements[i+1].Y+lineDeviation) {
+			item := parseEnergySourceRow(row)
+			result = append(result, *item)
+			row = make([]*TableElement, 0)
+		}
+	}
+
+	return result
+}
+
+func parseVehicleTableElements(tableElements []*TableElement) []VehicleCategoryM {
 	result := make([]VehicleCategoryM, 0)
 	row := make([]*TableElement, 0)
 
@@ -181,8 +319,8 @@ func parseTableElements(tableElements []*TableElement) []VehicleCategoryM {
 		element := tableElements[i]
 		row = append(row, element)
 		if (i == len(tableElements)-1) || (element.Y < tableElements[i+1].Y-lineDeviation || element.Y > tableElements[i+1].Y+lineDeviation) {
-			vehicle := parseRow(row)
-			result = append(result, *vehicle)
+			item := parseVehicleRow(row)
+			result = append(result, *item)
 			row = make([]*TableElement, 0)
 		}
 	}
@@ -190,10 +328,27 @@ func parseTableElements(tableElements []*TableElement) []VehicleCategoryM {
 	return result
 }
 
-func parseRow(row []*TableElement) *VehicleCategoryM {
+func parseEnergySourceRow(row []*TableElement) *EnergySource {
+	item := &EnergySource{}
+	for _, tableElement := range row {
+		closestPosition := closest(tableElement.X, columnsEnergySource)
+		switch closestPosition {
+		case esShortName:
+			item.ShortName = tableElement.Text
+		case esCode:
+			item.Code = tableElement.Text
+
+		default:
+			log.Printf("Unknown position: %d", closestPosition)
+		}
+	}
+	return item
+}
+
+func parseVehicleRow(row []*TableElement) *VehicleCategoryM {
 	vehicle := &VehicleCategoryM{}
 	for _, tableElement := range row {
-		closestPosition := closest(tableElement.X, columns)
+		closestPosition := closest(tableElement.X, columnsVehicle)
 		switch closestPosition {
 		case manufacturerCodeNumber:
 			vehicle.ManufacturerCodeNumber = &tableElement.Text

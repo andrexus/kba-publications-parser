@@ -17,11 +17,11 @@ var rootCmd = cobra.Command{
 // NewRoot will add flags and subcommands to the different commands
 func RootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().StringP("config", "c", "", "The configuration file")
-	rootCmd.AddCommand(&serveCmd, &versionCmd)
+	rootCmd.AddCommand(&serveCmd, &kbaParseCmd, &versionCmd)
 	return &rootCmd
 }
 
-func execWithConfig(cmd *cobra.Command, fn func(config *conf.Configuration)) {
+func execWithConfig(cmd *cobra.Command, fn func(cmd *cobra.Command, config *conf.Configuration)) {
 	configFile, err := cmd.Flags().GetString("config")
 	if err != nil {
 		logrus.Fatalf("%+v", err)
@@ -32,5 +32,5 @@ func execWithConfig(cmd *cobra.Command, fn func(config *conf.Configuration)) {
 		logrus.Fatalf("Failed to load configuration: %+v", err)
 	}
 
-	fn(config)
+	fn(cmd, config)
 }
