@@ -12,6 +12,7 @@
 
 [[constraint]]
   name = "github.com/xlab/closer"
+  branch = "master"
 
 [[constraint]]
   name = "github.com/spf13/cobra"
